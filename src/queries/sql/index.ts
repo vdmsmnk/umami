@@ -39,3 +39,5 @@ export * from './sessions/getWebsiteSession';
 export * from './sessions/getWebsiteSessionStats';
 export * from './sessions/getWebsiteSessions';
 export * from './sessions/saveSessionData';
+export * from './identity/createIdentityLink';
+export * from './identity/getLinkedVisitorIds';
