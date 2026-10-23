@@ -34,6 +34,10 @@ async function relationalQuery(
       websiteId,
     });
 
+  // Identity stitching (custom): visitors are counted once across sessions, by identified
+  // user (distinct_id on any session from the same browser), then by persistent visitor_id,
+  // falling back to session_id. Joined outside the inner query so it never clashes with
+  // joinSessionQuery.
   const { excludeBounce } = filters;
   const hasEventFilters =
     EVENT_COLUMNS.some(item => Object.keys(filters).includes(item)) ||
@@ -44,7 +48,7 @@ async function relationalQuery(
       `
       select
         cast(coalesce(sum(t.c), 0) as bigint) as "pageviews",
-        count(distinct t.session_id) as "visitors",
+        count(distinct coalesce(vs.distinct_id, vl.distinct_id, vs.visitor_id, t.session_id::text)) as "visitors",
         count(distinct t.visit_id) as "visits",
         ${excludeBounce ? '0' : 'coalesce(sum(case when t.c = 1 and t.has_custom_event = 0 then 1 else 0 end), 0)'} as "bounces",
         cast(coalesce(sum(${getTimestampDiffSQL('t.min_time', 't.max_time')}), 0) as bigint) as "totaltime"
@@ -67,6 +71,15 @@ async function relationalQuery(
         group by 1, 2
         having sum(case when website_event.event_type NOT IN (2, 5) then 1 else 0 end) > 0
       ) as t
+      left join session vs
+        on vs.session_id = t.session_id
+        and vs.website_id = {{websiteId::uuid}}
+      left join lateral (
+        select min(s2.distinct_id) as distinct_id
+        from session s2
+        where s2.website_id = vs.website_id
+          and s2.visitor_id = vs.visitor_id
+      ) vl on vs.visitor_id is not null
       `,
       queryParams,
       FUNCTION_NAME,
@@ -94,7 +107,7 @@ async function relationalQuery(
     `
     select
       cast(coalesce(sum(t.c), 0) as bigint) as "pageviews",
-      count(distinct t.session_id) as "visitors",
+      count(distinct coalesce(vs.distinct_id, vl.distinct_id, vs.visitor_id, t.session_id::text)) as "visitors",
       count(distinct t.visit_id) as "visits",
       ${bounceQuery} as "bounces",
       cast(coalesce(sum(${getTimestampDiffSQL('t.min_time', 't.max_time')}), 0) as bigint) as "totaltime"
@@ -116,6 +129,15 @@ async function relationalQuery(
       group by 1, 2
     ) as t
     ${visitEventsJoin}
+    left join session vs
+      on vs.session_id = t.session_id
+      and vs.website_id = {{websiteId::uuid}}
+    left join lateral (
+      select min(s2.distinct_id) as distinct_id
+      from session s2
+      where s2.website_id = vs.website_id
+        and s2.visitor_id = vs.visitor_id
+    ) vl on vs.visitor_id is not null
     `,
     queryParams,
     FUNCTION_NAME,

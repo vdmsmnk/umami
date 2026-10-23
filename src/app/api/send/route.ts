@@ -50,6 +50,7 @@ const schema = z.object({
       userAgent: z.string().optional(),
       timestamp: z.coerce.number().int().optional(),
       id: z.string().optional(),
+      vid: z.string().max(50).optional(),
       browser: z.string().optional(),
       os: z.string().optional(),
       device: z.string().optional(),
@@ -97,6 +98,7 @@ export async function POST(request: Request) {
       tag,
       timestamp,
       id,
+      vid: visitorId,
       lcp,
       inp,
       cls,
@@ -177,6 +179,7 @@ export async function POST(request: Request) {
         region,
         city,
         distinctId,
+        visitorId,
         createdAt,
       });
     }

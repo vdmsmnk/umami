@@ -251,6 +251,7 @@ type MetricEntry = PerformanceEntry & {
   const credentials = (config('fetch-credentials') || 'omit') as RequestCredentials;
   const perf = config('performance') === _true;
   const autoPageview = config('auto-pageview') !== _false;
+  const identityStitching = config('identity-stitching') !== _false;
 
   const domains = domain.split(',').map(n => n.trim());
   const host =
@@ -262,6 +263,32 @@ type MetricEntry = PerformanceEntry & {
   const delayDuration = 300;
 
   /* Helper functions */
+
+  // Identity stitching: persistent anonymous visitor id kept in localStorage so
+  // returning visitors are counted once across sessions. Disable with
+  // data-identity-stitching="false".
+  const getVisitorId = (): string | undefined => {
+    if (!identityStitching || !localStorage) return undefined;
+    try {
+      const key = 'umami.visitor';
+      let vid = localStorage.getItem(key);
+      if (!vid) {
+        vid =
+          typeof crypto !== 'undefined' && crypto.randomUUID
+            ? crypto.randomUUID()
+            : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+                const r = (Math.random() * 16) | 0;
+                return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+              });
+        localStorage.setItem(key, vid);
+      }
+      return vid;
+    } catch {
+      return undefined;
+    }
+  };
+
+  const visitorId = getVisitorId();
 
   const normalize = (raw: string | URL): string => {
     if (!raw) return raw as string;
@@ -290,6 +317,7 @@ type MetricEntry = PerformanceEntry & {
     referrer: stripOrigin(currentRef),
     tag,
     id: identity ? identity : undefined,
+    vid: visitorId,
   });
 
   const hasDoNotTrack = () => {
